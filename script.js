@@ -264,11 +264,11 @@ async function markDone(index, e) {
   if (!habit.lastCompleted) {
     habit.streak = 1;
   } else {
-    const last    = new Date(habit.lastCompleted);
-    const now     = new Date(today);
-    const diffMs  = now - last;
+    const last     = new Date(habit.lastCompleted);
+    const now      = new Date(today);
+    const diffMs   = now - last;
     const diffDays = diffMs / (1000 * 60 * 60 * 24);
-    habit.streak  = diffDays < 2 ? habit.streak + 1 : 1;
+    habit.streak   = diffDays < 2 ? habit.streak + 1 : 1;
   }
 
   habit.lastCompleted = today;
@@ -392,4 +392,252 @@ document.getElementById('logModalBackdrop').addEventListener('click', function (
   buildEmojiPicker();
   await loadHabits();
   renderHabits();
+})();
+
+/* ============================================================
+   effects.js  —  Sparkles · Cursor Trail · Card Tilt
+                  Counter Animation · Theme Toggle
+   ============================================================ */
+
+/* ── 1. SPARKLE CANVAS ──────────────────────────────────── */
+(function initSparkles() {
+  const canvas = document.getElementById('sparkle-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  const COLORS = [
+    'rgba(242,167,184,VAL)',
+    'rgba(201,184,240,VAL)',
+    'rgba(247,207,168,VAL)',
+    'rgba(168,223,200,VAL)',
+    'rgba(251,213,224,VAL)',
+    'rgba(255,255,255,VAL)',
+  ];
+
+  let W, H, particles = [];
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function Particle() { this.reset(true); }
+
+  Particle.prototype.reset = function(initial) {
+    this.x        = Math.random() * W;
+    this.y        = initial ? Math.random() * H : H + 10;
+    this.r        = .8 + Math.random() * 2.2;
+    this.vx       = (Math.random() - .5) * .35;
+    this.vy       = -(.18 + Math.random() * .55);
+    this.life     = 0;
+    this.maxLife  = 180 + Math.random() * 220;
+    this.color    = COLORS[Math.floor(Math.random() * COLORS.length)];
+    this.isStar   = Math.random() < .35;
+    this.rotation = Math.random() * Math.PI * 2;
+    this.rotSpeed = (Math.random() - .5) * .04;
+  };
+
+  Particle.prototype.draw = function() {
+    const progress = this.life / this.maxLife;
+    const alpha = progress < .2
+      ? progress / .2
+      : progress > .7
+        ? 1 - (progress - .7) / .3
+        : 1;
+    const col = this.color.replace('VAL', (alpha * .75).toFixed(2));
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
+    if (this.isStar) {
+      ctx.fillStyle = col;
+      const s = this.r;
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const angle  = (i / 4) * Math.PI * 2;
+        const outerX = Math.cos(angle) * s * 2.2;
+        const outerY = Math.sin(angle) * s * 2.2;
+        const ia     = angle + Math.PI / 4;
+        const innerX = Math.cos(ia) * s * .6;
+        const innerY = Math.sin(ia) * s * .6;
+        if (i === 0) ctx.moveTo(outerX, outerY);
+        else         ctx.lineTo(outerX, outerY);
+        ctx.lineTo(innerX, innerY);
+      }
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.r * 2.5);
+      grad.addColorStop(0, col);
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.r * 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  };
+
+  Particle.prototype.update = function() {
+    this.x        += this.vx;
+    this.y        += this.vy;
+    this.rotation += this.rotSpeed;
+    this.life++;
+    if (this.life >= this.maxLife) this.reset(false);
+  };
+
+  for (let i = 0; i < 55; i++) particles.push(new Particle());
+
+  function loop() {
+    ctx.clearRect(0, 0, W, H);
+    particles.forEach(p => { p.update(); p.draw(); });
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+
+
+/* ── 2. CURSOR SPARKLE TRAIL ────────────────────────────── */
+(function initCursorTrail() {
+  let lastX = 0, lastY = 0, throttle = 0;
+  document.addEventListener('mousemove', e => {
+    throttle++;
+    if (throttle % 3 !== 0) return;
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    if (Math.abs(dx) + Math.abs(dy) < 6) return;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    const dot = document.createElement('div');
+    dot.className = 'cursor-star';
+    dot.style.left = e.clientX + 'px';
+    dot.style.top  = e.clientY + 'px';
+    const s = 4 + Math.random() * 6;
+    dot.style.width  = s + 'px';
+    dot.style.height = s + 'px';
+    document.body.appendChild(dot);
+    setTimeout(() => dot.remove(), 700);
+  });
+})();
+
+
+/* ── 3. CARD 3D TILT + GLOW ─────────────────────────────── */
+(function initCardTilt() {
+  const TILT  = 8;
+  const SCALE = 1.025;
+
+  function attachTilt(card) {
+    if (card.dataset.tiltBound) return;
+    card.dataset.tiltBound = '1';
+
+    card.addEventListener('mousemove', e => {
+      const rect = card.getBoundingClientRect();
+      const cx   = rect.left + rect.width  / 2;
+      const cy   = rect.top  + rect.height / 2;
+      const dx   = (e.clientX - cx) / (rect.width  / 2);
+      const dy   = (e.clientY - cy) / (rect.height / 2);
+      const rotX = -dy * TILT;
+      const rotY =  dx * TILT;
+      card.style.transform = `perspective(900px) rotateX(${rotX}deg) rotateY(${rotY}deg) scale(${SCALE})`;
+      card.classList.add('tilting');
+      const px = ((e.clientX - rect.left) / rect.width  * 100).toFixed(1);
+      const py = ((e.clientY - rect.top)  / rect.height * 100).toFixed(1);
+      card.style.setProperty('--cursor-x', px + '%');
+      card.style.setProperty('--cursor-y', py + '%');
+      if (Math.random() < .12) {
+        const sp = document.createElement('div');
+        sp.className  = 'card-sparkle';
+        sp.style.left = (e.clientX - rect.left) + 'px';
+        sp.style.top  = (e.clientY - rect.top)  + 'px';
+        card.appendChild(sp);
+        setTimeout(() => sp.remove(), 600);
+      }
+    });
+
+    card.addEventListener('mouseleave', () => {
+      card.style.transform = '';
+      card.classList.remove('tilting');
+    });
+  }
+
+  function attachAll() {
+    document.querySelectorAll('.habit-card').forEach(attachTilt);
+  }
+  attachAll();
+
+  const observer = new MutationObserver(attachAll);
+  observer.observe(document.getElementById('habitList') || document.body, {
+    childList: true, subtree: true
+  });
+})();
+
+
+/* ── 4. SMOOTH COUNTER ANIMATION for stat numbers ──────── */
+(function initCounters() {
+  const CHECK_INTERVAL = 200;
+  const maxTries = 20;
+  let tries = 0;
+
+  function animateValue(el, target) {
+    const start   = parseInt(el.textContent) || 0;
+    if (start === target) return;
+    const dur     = 500;
+    const startTs = performance.now();
+    const step    = ts => {
+      const p    = Math.min((ts - startTs) / dur, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(start + (target - start) * ease);
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  function patchUpdateStats() {
+    if (typeof updateStats === 'undefined') {
+      if (++tries < maxTries) setTimeout(patchUpdateStats, CHECK_INTERVAL);
+      return;
+    }
+    const original = updateStats;
+    window.updateStats = function() {
+      original();
+      requestAnimationFrame(() => {
+        ['statTotal','statCompleted','statBestStreak'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) animateValue(el, parseInt(el.textContent) || 0);
+        });
+      });
+    };
+  }
+  patchUpdateStats();
+})();
+
+
+/* ── 5. LIGHT / DARK THEME TOGGLE ──────────────────────── */
+(function initThemeToggle() {
+  const btn  = document.getElementById('themeToggle');
+  if (!btn) return;
+  const html = document.documentElement;
+
+  const ICONS = { dark: '🌙', light: '☀️' };
+
+  // load saved preference, default = dark
+  const saved = localStorage.getItem('habit-theme') || 'dark';
+  applyTheme(saved);
+
+  btn.addEventListener('click', () => {
+    const next = html.dataset.theme === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    localStorage.setItem('habit-theme', next);
+    // spin animation
+    btn.style.transition = 'transform .35s cubic-bezier(.34,1.56,.64,1)';
+    btn.style.transform  = 'scale(.85) rotate(360deg)';
+    setTimeout(() => { btn.style.transform = ''; }, 380);
+  });
+
+  function applyTheme(theme) {
+    html.dataset.theme = theme;
+    btn.textContent    = ICONS[theme === 'light' ? 'light' : 'dark'];
+    btn.title          = theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode';
+  }
 })();
